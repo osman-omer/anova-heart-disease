@@ -30,7 +30,7 @@ Examine whether **cholesterol levels** differ across **chest pain types**.
 ## 🖼️ Visualization
 Boxplot with jitter showing cholesterol by chest pain type and significant differences:
 
-![Cholesterol by Chest Pain Type](plots/final_vis.png)
+![Cholesterol by Chest Pain Type](plots/final_plot.png)
 
 ## 🧠 Conclusion
 Cholesterol levels show **small but statistically significant differences** between some chest pain groups, particularly between Typical angina and Non-anginal pain.  
