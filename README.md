@@ -19,7 +19,7 @@ Examine whether **cholesterol levels** differ across **chest pain types**.
 - Effect size calculation (epsilon squared)
 
 ## 📈 Key Findings
-- Cholesterol levels differ across chest pain types (**Kruskal–Wallis**: χ² = 8.90, df = 3, p = 0.031)  
+- Cholesterol levels differ across chest pain types (**Kruskal–Wallis**: χ² = 8.90, df = 3, p = 0.030)  
 - **Post-hoc Dunn test**:  
   - Typical angina vs Non-anginal pain: p.adj = 0.043 (*)  
   - All other pairwise comparisons: not significant  
