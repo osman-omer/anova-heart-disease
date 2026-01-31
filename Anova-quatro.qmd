@@ -1,0 +1,173 @@
+---
+title: "Anova Test for heart disease"
+author: "Osman Omer Mustafa "
+date: "today"
+format:
+ html:
+   toc: true
+   code-fold: true
+   theme: cosmo
+---
+
+## Load packages
+```{r setup,message=FALSE, warning=FALSE }
+library(tidyverse)
+library(rstatix)
+library(ggpubr) 
+```
+
+## Read data
+```{r message=FALSE}
+data <- read_csv("heart.csv")
+```
+
+## Quick structure check
+Check the dataset structure to verify variable types and identify any potential issues (e.g., numeric vs categorical) before further processing.Check the dataset structure to verify variable types and identify any potential issues (e.g., numeric vs categorical) before further processing.
+```{r}
+glimpse(data)
+```
+
+
+## Inspect chest pain codes
+Inspect the distribution of chest pain codes to understand group sizes and check for any unusual or missing categories before converting to factors.
+```{r}
+table(data$cp)
+```
+
+## Convert cp to factor with labels and order
+Convert cp to a factor with descriptive labels to make plots and summaries more interpretable. Factor ordering also ensures consistent group arrangement.
+```{r}
+data <- data %>% 
+  mutate(cp = factor(cp, 
+                     labels = c("Typical angina", 
+                                "Atypical angina",
+                                "Non-anginal pain", 
+                                "Asymptomatic")))
+```
+
+## Check conversion
+Verify that the conversion was successful and that all groups are correctly labeled.
+```{r}
+table(data$cp)
+```
+
+## Descriptive statistics by chest pain type
+Calculate summary statistics (mean, SD, median, IQR) for cholesterol by chest pain type.
+Both mean/SD and median/IQR are reported because normality is uncertain; median/IQR is robust to skewed data.
+```{r}
+des_by_cp <- data %>% 
+  group_by(cp) %>% 
+  summarise(
+    n = n(),
+    mean_chol = mean(chol, na.rm = TRUE),
+    sd_chol = sd(chol, na.rm = TRUE),
+    median_chol = median(chol, na.rm = TRUE),
+    iqr_chol = IQR(chol, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+des_by_cp %>% knitr::kable(digits = 2, caption = "Summary Statistics")
+```
+
+## Initial visualization (boxplot)
+Visualize cholesterol distribution across chest pain types.
+Boxplots help detect median differences, variability, and potential outliers.
+Useful to support assumption checks and interpret Kruskal–Wallis results later.
+```{r}
+box_anova <- ggplot(data, aes(x = cp, y = chol)) +
+  geom_boxplot() +
+  labs(
+    x = "Chest pain type",
+    y = "Cholesterol (mg/dL)",
+    title = "Cholesterol by Chest Pain Type"
+  ) 
+
+box_anova
+```
+
+## Normality check: QQ plots by group
+Assess normality of cholesterol within each chest pain group.
+QQ plots help identify deviations from normality, guiding choice between ANOVA and Kruskal–Wallis.
+```{r}
+ggqqplot_group <- function(data, grp) {
+  data %>% 
+    ggplot(aes(sample = chol)) +
+    stat_qq() +
+    stat_qq_line() +
+    facet_wrap(vars({{ grp }}), nrow = 2) +
+    labs(title = "QQ Plots of Cholesterol by Chest Pain Type")
+}
+
+ggqqplot_group(data, cp)
+```
+Comment:  
+QQ plots show that cholesterol distribution deviates from normality in at least some chest pain groups,  
+suggesting that non-parametric methods (Kruskal-Wallis) are more appropriate than ANOVA.
+
+## Homogeneity of variance (Levene's test)
+Levene's test is used to assess the homogeneity of variances across chest pain groups, which is an important assumption for parametric ANOVA.
+```{r}
+levene_res <- data %>% 
+  levene_test(chol ~ cp)
+
+levene_res %>% knitr::kable(caption = "Levene's Test Results")
+```
+The test shows a significant result (p = 0.00173), indicating that variances are not equal across groups. This violation supports the decision to use the non-parametric Kruskal–Wallis test instead of ANOVA.
+
+## Kruskal–Wallis test (used because assumptions violated)
+Since the normality and homogeneity assumptions are violated, the Kruskal–Wallis test is appropriate for comparing cholesterol levels across chest pain groups. It is a non-parametric alternative to one-way ANOVA.
+```{r}
+kruskal_res <- data %>% 
+  kruskal_test(chol ~ cp)
+kruskal_res %>% knitr::kable(caption = "Kruskal–Wallis Test")
+```
+The Kruskal–Wallis test is significant (p = 0.0306), indicating that there is a statistically significant difference in cholesterol levels between at least two chest pain groups.
+
+## Post-hoc Dunn test with Bonferroni correction
+Since the Kruskal–Wallis test indicates a significant difference, a post-hoc test is required to determine which specific groups differ. Dunn’s test with Bonferroni correction controls for multiple comparisons.
+```{r}
+posthoc <- data %>% 
+  dunn_test(chol ~ cp, p.adjust.method = "bonferroni")
+posthoc %>% knitr::kable(digits = 3,
+                         caption = "Dunn Post-hoc Results")
+```
+Only the comparison between Typical angina and Non-anginal pain is statistically significant (p.adj = 0.043). All other pairwise comparisons are non-significant.
+
+## Effect size (epsilon squared)
+Calculating effect size quantifies the magnitude of the difference between groups, beyond just statistical significance. For Kruskal–Wallis, epsilon squared (η²[H]) is appropriate.
+```{r}
+ef_size <- data %>% 
+  kruskal_effsize(chol ~ cp)
+ef_size %>% knitr::kable(caption = "Effect Size Result")
+```
+The effect size is very small (η²[H] ≈ 0.0058), indicating that although there is a statistically significant difference between groups, the practical impact is minimal.
+
+## Final visualization with significance stars
+Adding significance stars on the boxplot highlights which group comparisons are statistically significant. This makes it easier to interpret post-hoc results visually.
+```{r}
+stat.test <- posthoc %>% add_xy_position(x = "cp")  # determines star positions
+
+fin_vis <- ggboxplot(data, x = "cp", y = "chol", 
+                     fill = "cp", palette = "jco",
+                     add = "jitter", alpha = 0.6) +
+  stat_pvalue_manual(stat.test, label = "p.adj.signif", hide.ns = TRUE) + # hide non-significant
+  labs(
+    x = "Chest pain type", 
+    y = "Cholesterol (mg/dL)",
+    title = "Significant Differences in Cholesterol Levels"
+  ) +
+  theme_minimal()+
+  theme(legend.position = "none")
+
+fin_vis
+```
+The plot shows that "Typical angina" vs "Non-anginal pain" has a significant difference in cholesterol levels (p.adj < 0.05), while other comparisons are not significant. This confirms the post-hoc Dunn test results visually.
+
+## Conclusion
+
+The Kruskal–Wallis test revealed a statistically significant difference in cholesterol levels across chest pain types (p = 0.031).
+Post-hoc analysis with Bonferroni correction indicated that the significant difference is mainly between "Typical angina" and "Non-anginal pain" groups.
+Effect size is small (ε² ≈ 0.006), suggesting that the magnitude of differences is limited.
+Overall, cholesterol levels vary slightly among chest pain categories, but most differences are not statistically significant.
+This analysis demonstrates the non-parametric approach for group comparisons when ANOVA assumptions are violated
